@@ -1,0 +1,36 @@
+{
+  "transcription": {
+    "whisper_model": "large-v3",
+    "whisper_compute_type": "float16",
+    "language": "en",
+    "huggingface_token_env": "HUGGING_FACE_TOKEN",
+    "supported_audio_extensions": [".wav", ".mp3", ".m4a", ".flac", ".ogg"],
+    "supported_image_extensions": [".png", ".jpg", ".jpeg", ".tiff", ".bmp"],
+    "supported_pdf_extensions": [".pdf"],
+    "stereo_split_diarization": true
+  },
+  "flagging": {
+    "ollama_model": "llama3.1:8b",
+    "criteria": [
+      "References to illicit substances or drug use",
+      "Descriptions of illegal activities",
+      "Personal identifying information (SSN, account numbers, addresses)",
+      "Financial information (bank details, credit card numbers)",
+      "Medical or health information",
+      "Legal proceedings or attorney-client privileged content"
+    ],
+    "chunk_size_chars": 4000,
+    "chunk_overlap_chars": 500
+  },
+  "scheduling": {
+    "transcribe_interval_minutes": 60,
+    "flag_interval_minutes": 10
+  },
+  "paths": {
+    "root": ".",
+    "transcriptions": "1- transcriptions",
+    "review": "2- ready for human review",
+    "sanitized": "3- sanitized",
+    "archive": ".archive"
+  }
+}

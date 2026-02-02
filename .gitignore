@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Logs
+.privateclaw/logs/
+
+# User data — audio files, transcriptions, flagged files, sanitized files
+.archive/
+1- transcriptions/
+2- ready for human review/
+3- sanitized/
