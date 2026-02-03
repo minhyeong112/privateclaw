@@ -10,17 +10,17 @@
     "stereo_split_diarization": true
   },
   "flagging": {
-    "ollama_model": "llama3.1:8b",
+    "ollama_model": "qwen2.5:14b",
     "criteria": [
-      "References to illicit substances or drug use",
-      "Descriptions of illegal activities",
-      "Personal identifying information (SSN, account numbers, addresses)",
-      "Financial information (bank details, credit card numbers)",
-      "Medical or health information",
-      "Legal proceedings or attorney-client privileged content"
+      "Actual admissions of illicit drug use or possession (not just discussing the topic)",
+      "Specific descriptions of illegal activities committed by the speakers",
+      "Real personal identifying information being disclosed: SSNs, home addresses, phone numbers, account numbers",
+      "Real financial data being disclosed: bank account numbers, credit card numbers, specific personal account balances",
+      "Actual medical or health disclosures: diagnoses, prescriptions, conditions the speaker has",
+      "Details of active legal proceedings or attorney-client privileged conversations"
     ],
-    "chunk_size_chars": 4000,
-    "chunk_overlap_chars": 500
+    "chunk_size_lines": 80,
+    "chunk_overlap_lines": 10
   },
   "scheduling": {
     "transcribe_interval_minutes": 60,

@@ -9,6 +9,7 @@ import ollama
 
 from privateclaw.config import (
     FileLock,
+    get_archive_dir,
     get_review_dir,
     get_root,
     get_transcriptions_dir,
@@ -19,18 +20,26 @@ from privateclaw.config import (
 logger = setup_logging("flag")
 
 TEXT_EXTENSIONS = {".md", ".txt"}
+SKIP_FILES = {"README.md", "README.txt", "LICENSE", "LICENSE.md"}
 
-SYSTEM_PROMPT = """You are a privacy reviewer. Your job is to identify sections of text that contain sensitive or private content.
+SYSTEM_PROMPT = """You are a strict privacy auditor. You identify text that contains ACTUAL sensitive private data that would cause harm if leaked publicly.
 
-You will be given a piece of text and a list of criteria. For each section that matches ANY of the criteria, you must identify it by providing the first few words and last few words of that section.
+CRITICAL RULES:
+1. You ONLY flag text where real private data is DIRECTLY DISCLOSED — not discussed in the abstract.
+2. When in doubt, DO NOT flag. False positives are worse than false negatives.
+3. Discussing a TOPIC (e.g. "we care about privacy") is NOT sensitive. Only flag actual private data being revealed.
+4. Public information, hypothetical examples, general opinions, and technical discussions are NEVER sensitive.
 
-Respond with ONLY a JSON array. Each element should have:
-- "start_phrase": the first 5-8 words of the sensitive section
-- "end_phrase": the last 5-8 words of the sensitive section
+You will receive numbered lines. Return a JSON array of flagged ranges.
 
-If no sensitive content is found, respond with: []
+Each element must have:
+- "start_line": first line number of the sensitive section
+- "end_line": last line number of the sensitive section
+- "reason": brief explanation of what specific private data is disclosed
 
-IMPORTANT: Return ONLY valid JSON. No explanation, no markdown code fences, no other text."""
+If nothing should be flagged, return: []
+
+Return ONLY valid JSON. No explanation, no markdown fences, no other text."""
 
 
 def discover_text_files(root: Path, transcriptions_dir: Path) -> list[Path]:
@@ -43,40 +52,80 @@ def discover_text_files(root: Path, transcriptions_dir: Path) -> list[Path]:
         for f in search_dir.iterdir():
             if f.name.startswith(".") or f.is_dir():
                 continue
+            if f.name in SKIP_FILES:
+                continue
             if f.suffix.lower() in TEXT_EXTENSIONS:
                 files.append(f)
 
     return files
 
 
-def chunk_text(text: str, chunk_size: int, overlap: int) -> list[str]:
-    """Split text into overlapping chunks."""
-    if len(text) <= chunk_size:
-        return [text]
+def number_lines(text: str) -> tuple[str, list[str]]:
+    """Add line numbers to text for reliable LLM referencing. Returns numbered text and original lines."""
+    lines = text.split("\n")
+    numbered = []
+    for i, line in enumerate(lines, 1):
+        numbered.append(f"{i:04d}| {line}")
+    return "\n".join(numbered), lines
+
+
+def chunk_lines(lines: list[str], chunk_size: int, overlap: int) -> list[tuple[int, list[str]]]:
+    """Split lines into overlapping chunks. Returns (start_line_index, chunk_lines) tuples."""
+    if len(lines) <= chunk_size:
+        return [(0, lines)]
 
     chunks = []
     start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
+    while start < len(lines):
+        end = min(start + chunk_size, len(lines))
+        chunks.append((start, lines[start:end]))
+        if end >= len(lines):
+            break
         start = end - overlap
 
     return chunks
 
 
-def build_prompt(text_chunk: str, criteria: list[str]) -> str:
+def build_prompt(numbered_chunk: str, criteria: list[str]) -> str:
     """Build the user prompt for the LLM."""
     criteria_text = "\n".join(f"- {c}" for c in criteria)
-    return f"""Review the following text for sensitive content matching these criteria:
+    return f"""Review the following numbered lines for ACTUAL sensitive private data being disclosed.
 
+FLAG ONLY if the text contains REAL private data such as:
 {criteria_text}
+
+DO NOT FLAG:
+- General discussions ABOUT privacy, security, money, or health as topics
+- Opinions, preferences, or plans that don't reveal private data
+- Mentions of public figures, companies, products, or services
+- Hypothetical scenarios or examples ("what if we spent $5000")
+- Technical discussions about tools, models, pricing tiers, or workflows
+- Someone saying they care about privacy or want to keep data private
+- Casual conversation, jokes, or everyday chat
+- Names of people in a conversation (speaker labels)
+
+EXAMPLES OF WHAT TO FLAG:
+- "My SSN is 123-45-6789" → actual SSN disclosed
+- "I live at 742 Evergreen Terrace, Springfield" → actual home address
+- "My bank account number is 1234567890" → actual financial data
+- "I was diagnosed with diabetes last week" → actual medical disclosure
+- "I bought 2 grams of cocaine yesterday" → actual admission of illegal activity
+- "My lawyer said the case against me for fraud is..." → actual legal proceeding details
+
+EXAMPLES OF WHAT NOT TO FLAG:
+- "We should put a $500 bounty on this issue" → hypothetical, not actual financial data
+- "I trust Anthropic the most for privacy" → opinion about privacy, not private data
+- "The model costs $5 per million tokens" → public pricing info
+- "I'm using my Vajra project" → mentioning a project name
+- "Nolan said he's taking it easy tonight" → casual social info, not sensitive
+- "I need to get this set up for different directories" → technical discussion
 
 TEXT TO REVIEW:
 ---
-{text_chunk}
+{numbered_chunk}
 ---
 
-Identify all sensitive sections as JSON."""
+Return ONLY a JSON array of flagged ranges. If nothing should be flagged, return []."""
 
 
 def parse_llm_response(response_text: str) -> list[dict]:
@@ -110,101 +159,84 @@ def parse_llm_response(response_text: str) -> list[dict]:
     return []
 
 
-def find_phrase_position(text: str, phrase: str) -> int | None:
-    """Find the position of a phrase in text, with fuzzy matching."""
-    # Exact match first
-    pos = text.find(phrase)
-    if pos != -1:
-        return pos
+def insert_flags_by_lines(lines: list[str], flagged_ranges: list[dict]) -> str:
+    """Insert PRIVATE markers around flagged line ranges."""
+    if not flagged_ranges:
+        return "\n".join(lines)
 
-    # Try case-insensitive
-    pos = text.lower().find(phrase.lower())
-    if pos != -1:
-        return pos
+    START_MARKER = "----PRIVATE (START)----"
+    END_MARKER = "----PRIVATE (END)----"
 
-    # Try matching with normalized whitespace
-    normalized_phrase = " ".join(phrase.split())
-    normalized_text = " ".join(text.split())
-    pos = normalized_text.find(normalized_phrase)
-    if pos != -1:
-        # Map back to original position (approximate)
-        return text.find(normalized_phrase.split()[0])
+    # Collect and validate (start_line, end_line, reason) tuples
+    ranges = []
+    for entry in flagged_ranges:
+        start = entry.get("start_line")
+        end = entry.get("end_line")
+        reason = entry.get("reason", "")
 
-    return None
-
-
-def insert_flags(text: str, spans: list[dict]) -> str:
-    """Insert PRIVATE markers around identified spans in the text."""
-    if not spans:
-        return text
-
-    START_MARKER = "\n----PRIVATE (START)----\n"
-    END_MARKER = "\n----PRIVATE (END)----\n"
-
-    # Collect (start_pos, end_pos) tuples
-    insertions = []
-    for span in spans:
-        start_phrase = span.get("start_phrase", "")
-        end_phrase = span.get("end_phrase", "")
-
-        if not start_phrase or not end_phrase:
+        if start is None or end is None:
             continue
 
-        start_pos = find_phrase_position(text, start_phrase)
-        if start_pos is None:
-            logger.warning(f"Could not locate start phrase: '{start_phrase[:50]}'")
-            continue
+        # Convert to 0-indexed
+        start_idx = int(start) - 1
+        end_idx = int(end) - 1
 
-        # Search for end phrase after the start position
-        search_from = start_pos + len(start_phrase)
-        remaining = text[search_from:]
-        end_offset = find_phrase_position(remaining, end_phrase)
+        # Clamp to valid range
+        start_idx = max(0, min(start_idx, len(lines) - 1))
+        end_idx = max(start_idx, min(end_idx, len(lines) - 1))
 
-        if end_offset is None:
-            logger.warning(f"Could not locate end phrase: '{end_phrase[:50]}'")
-            continue
+        ranges.append((start_idx, end_idx, reason))
 
-        end_pos = search_from + end_offset + len(end_phrase)
-        insertions.append((start_pos, end_pos))
+    if not ranges:
+        return "\n".join(lines)
 
-    if not insertions:
-        return text
-
-    # Sort by position and merge overlapping spans
-    insertions.sort()
-    merged = [insertions[0]]
-    for start, end in insertions[1:]:
-        prev_start, prev_end = merged[-1]
-        if start <= prev_end:
-            merged[-1] = (prev_start, max(prev_end, end))
+    # Sort and merge overlapping ranges
+    ranges.sort()
+    merged = [ranges[0]]
+    for start, end, reason in ranges[1:]:
+        prev_start, prev_end, prev_reason = merged[-1]
+        if start <= prev_end + 1:
+            combined_reason = prev_reason
+            if reason and reason not in prev_reason:
+                combined_reason = f"{prev_reason}; {reason}" if prev_reason else reason
+            merged[-1] = (prev_start, max(prev_end, end), combined_reason)
         else:
-            merged.append((start, end))
+            merged.append((start, end, reason))
 
-    # Insert markers from end to start (to preserve positions)
-    result = text
-    for start, end in reversed(merged):
-        result = result[:end] + END_MARKER + result[end:]
-        result = result[:start] + START_MARKER + result[start:]
+    # Insert markers (process from end to preserve indices)
+    result_lines = list(lines)
+    for start_idx, end_idx, reason in reversed(merged):
+        reason_text = f" ({reason})" if reason else ""
+        result_lines.insert(end_idx + 1, f"{END_MARKER}{reason_text}")
+        result_lines.insert(start_idx, START_MARKER)
 
-    return result
+    return "\n".join(result_lines)
 
 
 def flag_file(file_path: Path, config: dict) -> str:
     """Process a single text file through the LLM flagging pipeline."""
     text = file_path.read_text(encoding="utf-8")
     flagging_config = config["flagging"]
+    lines = text.split("\n")
 
-    chunks = chunk_text(
-        text,
-        flagging_config["chunk_size_chars"],
-        flagging_config["chunk_overlap_chars"],
-    )
+    chunk_size_lines = flagging_config.get("chunk_size_lines", 80)
+    chunk_overlap_lines = flagging_config.get("chunk_overlap_lines", 10)
 
-    all_spans = []
+    chunks = chunk_lines(lines, chunk_size_lines, chunk_overlap_lines)
 
-    for i, chunk in enumerate(chunks):
-        logger.info(f"  Chunk {i + 1}/{len(chunks)}")
-        prompt = build_prompt(chunk, flagging_config["criteria"])
+    all_flags = []
+
+    for i, (start_offset, chunk) in enumerate(chunks):
+        logger.info(f"  Chunk {i + 1}/{len(chunks)} (lines {start_offset + 1}-{start_offset + len(chunk)})")
+
+        # Number lines within this chunk using their global line numbers
+        numbered = []
+        for j, line in enumerate(chunk):
+            global_line = start_offset + j + 1
+            numbered.append(f"{global_line:04d}| {line}")
+        numbered_text = "\n".join(numbered)
+
+        prompt = build_prompt(numbered_text, flagging_config["criteria"])
 
         try:
             response = ollama.chat(
@@ -215,13 +247,17 @@ def flag_file(file_path: Path, config: dict) -> str:
                 ],
             )
             response_text = response["message"]["content"]
-            spans = parse_llm_response(response_text)
-            all_spans.extend(spans)
+            logger.debug(f"  LLM response: {response_text[:300]}")
+            flags = parse_llm_response(response_text)
+            for flag in flags:
+                reason = flag.get("reason", "")
+                logger.info(f"    Flag: lines {flag.get('start_line')}-{flag.get('end_line')}: {reason}")
+            all_flags.extend(flags)
         except Exception as e:
             logger.error(f"  LLM call failed for chunk {i + 1}: {e}")
             continue
 
-    flagged_text = insert_flags(text, all_spans)
+    flagged_text = insert_flags_by_lines(lines, all_flags)
 
     flag_count = flagged_text.count("----PRIVATE (START)----")
     if flag_count > 0:
@@ -238,8 +274,10 @@ def main():
         root = get_root(config)
         transcriptions_dir = get_transcriptions_dir(config)
         review_dir = get_review_dir(config)
+        archive_dir = get_archive_dir(config)
 
         review_dir.mkdir(exist_ok=True)
+        archive_dir.mkdir(exist_ok=True)
 
         files = discover_text_files(root, transcriptions_dir)
 
@@ -254,19 +292,26 @@ def main():
 
             flagged_text = flag_file(file_path, config)
 
-            # Write to review directory
-            out_path = review_dir / file_path.name
+            # Write flagged version to review directory with _review suffix
+            review_name = f"{file_path.stem}_review{file_path.suffix}"
+            out_path = review_dir / review_name
             counter = 1
             while out_path.exists():
-                out_path = review_dir / f"{file_path.stem}_{counter}{file_path.suffix}"
+                out_path = review_dir / f"{file_path.stem}_review_{counter}{file_path.suffix}"
                 counter += 1
 
             out_path.write_text(flagged_text, encoding="utf-8")
             logger.info(f"  → {out_path.name}")
 
-            # Remove the original file (it's now in review)
-            file_path.unlink()
-            logger.info(f"  Removed original: {file_path.name}")
+            # Archive the original (clean, unflagged version)
+            archive_dest = archive_dir / file_path.name
+            counter = 1
+            while archive_dest.exists():
+                archive_dest = archive_dir / f"{file_path.stem}_{counter}{file_path.suffix}"
+                counter += 1
+
+            shutil.move(str(file_path), str(archive_dest))
+            logger.info(f"  Archived original: {archive_dest.name}")
 
         logger.info("Flagging complete.")
 
