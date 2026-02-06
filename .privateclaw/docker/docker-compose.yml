@@ -1,0 +1,52 @@
+# PrivateClaw OpenClaw Container Configuration
+# Security: Container has full network but ONLY sees workspace folder
+
+services:
+  openclaw-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: privateclaw-openclaw
+    restart: unless-stopped
+
+    # Security: run as non-root user (node UID 1000)
+    user: "1000:1000"
+
+    # Full network access for Anthropic API
+    network_mode: bridge
+
+    # Expose gateway on localhost only
+    ports:
+      - "127.0.0.1:18789:18789"
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+
+    # Volume mounts - ONLY workspace visible to container
+    volumes:
+      # OpenClaw config persistence (tokens, settings)
+      - ../../.openclaw:/home/node/.openclaw
+      # Workspace - THE ONLY HOST DATA IT CAN SEE
+      - "../../3- openclaw/workspace:/home/node/.openclaw/workspace"
+
+    # Load environment from .env file
+    env_file:
+      - ../../.env
+
+    # Environment variables
+    environment:
+      - NODE_ENV=production
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:18789/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

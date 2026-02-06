@@ -30,7 +30,17 @@
     "root": ".",
     "transcriptions": "1- transcriptions",
     "review": "2- ready for human review",
-    "sanitized": "3- sanitized",
-    "archive": ".archive"
+    "stays_private": "2.5- stays private",
+    "openclaw": "3- openclaw",
+    "archive": "0- archive"
+  },
+  "container": {
+    "enabled": true,
+    "image": "privateclaw-openclaw:latest",
+    "port": 18789,
+    "resources": {
+      "memory": "4g",
+      "cpus": 2
+    }
   }
 }

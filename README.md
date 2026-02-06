@@ -1,88 +1,176 @@
 # PrivateClaw
 
-A fully local privacy processing pipeline. Drop files into the root folder — audio, images, and PDFs get transcribed to markdown, then all text files are scanned by a local LLM for sensitive content and flagged for human review.
+A privacy-first pipeline that processes your files locally, flags sensitive content for human review, then lets you safely share approved content with a sandboxed AI assistant via Telegram.
 
-## Prerequisites
+**The workflow:**
+1. Drop files (audio, images, PDFs) into the root folder
+2. Local AI transcribes and flags sensitive content
+3. Review flagged files in Obsidian
+4. Drag approved files to the OpenClaw container for AI-powered processing via Telegram
 
-- **Python 3.10+** (managed by uv)
-- **[uv](https://docs.astral.sh/uv/)** — install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- **[Ollama](https://ollama.com/)** — local LLM runtime
-- **[Tesseract](https://github.com/tesseract-ocr/tesseract)** — for OCR (images and scanned PDFs). Install with `brew install tesseract` on macOS
-- **HuggingFace token** — required for pyannote speaker diarization. Create one at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens), then accept the terms for [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) and [pyannote/segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0)
+**Security model:** Everything outside the OpenClaw container is private. The container has full internet access but can ONLY see files you explicitly drag into `3- openclaw/workspace/`.
 
-## Quick Start
+## Quick Start (5 minutes)
+
+### Prerequisites
+
+- **macOS** (tested on Apple Silicon M1/M2/M3/M4)
+- **[uv](https://docs.astral.sh/uv/)** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- **[Anthropic account](https://console.anthropic.com/)** — for the AI (Claude)
+
+### Step 1: Clone and Install
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/minhyeong112/privateclaw.git
+git clone https://github.com/yourusername/privateclaw.git
 cd privateclaw
 
-# 2. Set up your HuggingFace token
-cp .env.example .env
-# Edit .env and paste your token: HUGGING_FACE_TOKEN=hf_your_token_here
-
-# 3. Install Python dependencies
+# Install dependencies and run setup
 cd .privateclaw/.scripts
 uv sync
-
-# 4. Pull the LLM model for privacy flagging
-ollama pull qwen2.5:14b
-
-# 5. Create the working directories
-cd ../..
-mkdir -p "1- transcriptions" "2- ready for human review" "3- sanitized" .archive
+uv run pc-setup
 ```
 
-## Usage
+The setup script will install Docker, Ollama, Tesseract, and Obsidian automatically via Homebrew.
 
-### Manual
+### Step 2: Configure Your API Key
+
+```bash
+# Edit .env and add your Anthropic API key/token
+# Get one at: https://console.anthropic.com/
+nano ../../.env
+```
+
+Add your token:
+```
+ANTHROPIC_API_KEY=sk-ant-your_token_here
+```
+
+### Step 3: Start the Container
+
+```bash
+uv run pc-container start
+```
+
+### Step 4: Connect the Dashboard (First Time Only)
+
+```bash
+# Get the tokenized URL
+uv run pc-container url
+```
+
+Open the URL in your browser and click **Connect**.
+
+### Step 5: Set Up Telegram
+
+1. Open Telegram and message **@BotFather**
+2. Send `/newbot` and follow the prompts
+3. Copy the bot token (looks like `123456789:ABCdefGHI...`)
+
+```bash
+# Configure your bot
+uv run pc-container telegram YOUR_BOT_TOKEN
+```
+
+4. Message your new bot on Telegram — you'll receive a pairing code
+5. Approve the pairing:
+
+```bash
+uv run pc-container approve YOUR_PAIRING_CODE
+```
+
+### Step 6: Open in Obsidian
+
+Open Obsidian → "Open folder as vault" → Select the `privateclaw` folder.
+
+**You're done!** Chat with your bot on Telegram. It can access files in `3- openclaw/workspace/`.
+
+---
+
+## Folder Structure
+
+```
+privateclaw/                        ← Obsidian vault root
+├── 0- archive/                     ← Original files preserved here
+├── 1- transcriptions/              ← Transcribed markdown files
+├── 2- ready for human review/      ← Flagged files with ----PRIVATE---- markers
+├── 2.5- stays private/             ← Files you want to keep local forever
+├── 3- openclaw/                    ← Docker mount point
+│   └── workspace/                  ← ONLY this folder is visible to the AI
+├── .openclaw/                      ← Container settings (hidden)
+├── .obsidian/                      ← Obsidian vault config
+└── .privateclaw/                   ← Configuration and scripts
+```
+
+## Container Commands
 
 ```bash
 cd .privateclaw/.scripts
 
-# Transcribe: converts audio/image/PDF files in the root folder to markdown
+uv run pc-container start           # Start the container
+uv run pc-container stop            # Stop the container
+uv run pc-container restart         # Restart
+uv run pc-container status          # Check status
+uv run pc-container logs            # View logs
+uv run pc-container url             # Get dashboard URL
+uv run pc-container telegram TOKEN  # Configure Telegram bot
+uv run pc-container approve CODE    # Approve pairing code
+uv run pc-container build           # Rebuild image
+uv run pc-container shell           # Shell into container
+```
+
+## Processing Commands
+
+```bash
+cd .privateclaw/.scripts
+
+# Transcribe audio/images/PDFs to markdown
 uv run pc-transcribe
 
-# Flag: scans text files for sensitive content and marks them for review
+# Flag sensitive content
 uv run pc-flag
+
+# Check setup status
+uv run pc-setup --check
 ```
 
-### Automated (Cron)
+### Automated Processing (Cron)
 
-Add these to your crontab (`crontab -e`), replacing `/path/to` with your actual path:
+```bash
+crontab -e
+```
+
+Add these lines (adjust path):
 
 ```cron
-0 * * * * /path/to/privateclaw/.privateclaw/.scripts/cron_runner.sh transcribe
-*/10 * * * * /path/to/privateclaw/.privateclaw/.scripts/cron_runner.sh flag
+* * * * * /path/to/privateclaw/.privateclaw/.scripts/cron_runner.sh transcribe
+* * * * * /path/to/privateclaw/.privateclaw/.scripts/cron_runner.sh flag
 ```
-
-This runs transcription every hour and flagging every 10 minutes. Logs go to `.privateclaw/logs/`.
 
 ## How It Works
 
 ```
-Root folder (drop files here)
-    │
-    ├─ Audio (.wav, .mp3, .m4a, .flac, .ogg)
-    ├─ Images (.png, .jpg, .jpeg, .tiff, .bmp)
-    └─ PDFs (.pdf)
+Drop files here (audio, images, PDFs)
+         ↓
+    pc-transcribe (local Whisper + OCR)
+         ↓
+    1- transcriptions/
+         ↓
+    pc-flag (local Ollama LLM)
+         ↓
+    2- ready for human review/
+         ↓
+    YOU review in Obsidian, remove/redact sensitive content
+         ↓
+    DRAG to destination:
          │
-         ▼  pc-transcribe
+         ├── 2.5- stays private/     → Stays local forever
          │
-    1- transcriptions/     (markdown with speaker labels + timestamps)
-    .archive/              (original media files preserved here)
-         │
-         ▼  pc-flag
-         │
-    2- ready for human review/   (flagged copy with ----PRIVATE---- markers)
-    .archive/                    (clean transcription also preserved here)
-         │
-         ▼  Human review (manual)
-         │
-    3- sanitized/          (move approved files here after review)
+         └── 3- openclaw/workspace/  → Visible to AI via Telegram
 ```
 
-Sensitive sections are wrapped with markers:
+### Privacy Markers
+
+Flagged sections look like this:
 
 ```
 ----PRIVATE (START)----
@@ -90,54 +178,68 @@ Sensitive sections are wrapped with markers:
 ----PRIVATE (END)---- (SSN disclosed)
 ```
 
+Remove or redact these before moving files to the OpenClaw folder.
+
+## Security Model
+
+| Zone | Network | What AI Sees |
+|------|---------|--------------|
+| **Private Zone** (root, transcriptions, review) | Local only | Nothing — processed by local LLMs |
+| **OpenClaw Container** | Full internet | ONLY `3- openclaw/workspace/` |
+
+The container runs with:
+- Non-root user (UID 1000)
+- Resource limits (4GB RAM, 2 CPUs)
+- Single volume mount — cannot see anything outside workspace
+
 ## Configuration
 
-Edit `.privateclaw/config.json` to customize:
-
-### Transcription
+Edit `.privateclaw/config.json`:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `whisper_model` | `large-v3` | Whisper model for speech-to-text. Options: `tiny`, `base`, `small`, `medium`, `large`, `large-v2`, `large-v3` |
-| `language` | `en` | Language code for transcription |
-| `supported_audio_extensions` | `.wav .mp3 .m4a .flac .ogg` | Audio formats to process |
-| `supported_image_extensions` | `.png .jpg .jpeg .tiff .bmp` | Image formats for OCR |
-| `supported_pdf_extensions` | `.pdf` | PDF format |
-
-### Flagging
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `ollama_model` | `qwen2.5:14b` | Ollama model for privacy flagging. Larger models = better accuracy. Try `qwen2.5:32b` if you have 64GB+ RAM |
-| `criteria` | See config | List of privacy criteria to flag. Edit these to match your needs |
-| `chunk_size_lines` | `80` | Lines per chunk sent to the LLM |
-| `chunk_overlap_lines` | `10` | Overlap between chunks for context |
-
-### Paths
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `root` | `.` | Where to look for input files |
-| `transcriptions` | `1- transcriptions` | Output folder for transcriptions |
-| `review` | `2- ready for human review` | Output folder for flagged files |
-| `sanitized` | `3- sanitized` | Folder for human-approved files |
-| `archive` | `.archive` | Archive for originals |
+| `whisper_model` | `large-v3` | Whisper model size |
+| `ollama_model` | `qwen2.5:14b` | Local LLM for flagging |
+| `container.port` | `18789` | OpenClaw web UI port |
 
 ## Privacy Criteria
 
 The default criteria flag:
+- Drug use or possession admissions
+- Descriptions of illegal activities
+- Personal identifying info (SSNs, addresses, phone numbers)
+- Financial data (account numbers, balances)
+- Medical disclosures (diagnoses, prescriptions)
+- Legal proceedings or privileged content
 
-- Actual admissions of drug use or possession
-- Descriptions of illegal activities committed by speakers
-- Real personal identifying info (SSNs, addresses, phone numbers, account numbers)
-- Real financial data (bank accounts, credit card numbers, balances)
-- Medical/health disclosures (diagnoses, prescriptions, conditions)
-- Legal proceedings or attorney-client privileged content
-
-Edit the `criteria` array in `config.json` to add or remove categories.
+Edit the `criteria` array in `config.json` to customize.
 
 ## System Requirements
 
-- **Transcription**: Runs on CPU. A single audio file takes roughly 1-2x its duration to transcribe with `large-v3`. Diarization adds similar time.
-- **Flagging**: Requires Ollama with enough RAM for your chosen model. `qwen2.5:14b` needs ~10GB RAM. `qwen2.5:32b` needs ~20GB.
-- All processing happens locally. No data is sent to any server (except the initial model downloads).
+- **Transcription**: Runs on CPU. ~1-2x real-time for audio.
+- **Flagging**: Requires Ollama. `qwen2.5:14b` needs ~10GB RAM.
+- **OpenClaw**: Requires Docker. Uses up to 4GB RAM.
+- **Recommended**: Apple Silicon Mac with 16GB+ RAM
+
+## Troubleshooting
+
+**Container won't start?**
+```bash
+uv run pc-container build   # Rebuild the image
+```
+
+**Dashboard won't connect?**
+```bash
+uv run pc-container url     # Get fresh tokenized URL
+uv run pc-container approve # Approve pending device requests
+```
+
+**Telegram bot not responding?**
+```bash
+uv run pc-container logs    # Check for errors
+uv run pc-container restart # Restart container
+```
+
+## License
+
+MIT

@@ -9,8 +9,29 @@ __pycache__/
 # Logs
 .privateclaw/logs/
 
-# User data — audio files, transcriptions, flagged files, sanitized files
-.archive/
+# User data — audio files, transcriptions, flagged files
+0- archive/
 1- transcriptions/
 2- ready for human review/
-3- sanitized/
+2.5- stays private/
+3- openclaw/
+
+# OpenClaw container config (contains tokens, pairing info)
+.openclaw/
+
+# Obsidian (keep app.json for vault config)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/.obsidian
+.obsidian/plugins/
+.obsidian/themes/
+
+# macOS
+.DS_Store
+
+# Audio/media files (user content)
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg

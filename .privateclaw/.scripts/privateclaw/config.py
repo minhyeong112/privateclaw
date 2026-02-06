@@ -50,12 +50,23 @@ def get_review_dir(config: dict) -> Path:
     return get_root(config) / config["paths"]["review"]
 
 
-def get_sanitized_dir(config: dict) -> Path:
-    return get_root(config) / config["paths"]["sanitized"]
+def get_stays_private_dir(config: dict) -> Path:
+    """Get the 'stays private' directory for files that never leave."""
+    return get_root(config) / config["paths"].get("stays_private", "2.5- stays private")
+
+
+def get_openclaw_dir(config: dict) -> Path:
+    """Get the OpenClaw folder (Docker mount point)."""
+    return get_root(config) / config["paths"].get("openclaw", "3- openclaw")
 
 
 def get_archive_dir(config: dict) -> Path:
     return get_root(config) / config["paths"]["archive"]
+
+
+def get_openclaw_config_dir() -> Path:
+    """Get the hidden OpenClaw config directory."""
+    return PROJECT_ROOT / ".openclaw"
 
 
 def get_huggingface_token(config: dict) -> str:
