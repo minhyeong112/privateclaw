@@ -28,11 +28,11 @@
   },
   "paths": {
     "root": ".",
-    "transcriptions": "1- transcriptions",
-    "review": "2- ready for human review",
-    "stays_private": "2.5- stays private",
-    "openclaw": "3- openclaw",
-    "archive": "0- archive"
+    "archive": "ARCHIVE",
+    "transcriptions": "TRANSCRIPTIONS",
+    "flagged": "FLAGGED",
+    "private": "PRIVATE",
+    "openclaw": "OPENCLAW"
   },
   "container": {
     "enabled": true,

@@ -109,30 +109,72 @@ def configure_cron():
         print("  Done!")
 
 
+def get_container_status():
+    """Get container status for display."""
+    result = subprocess.run(
+        ["docker", "ps", "--filter", "name=privateclaw-openclaw", "--format", "{{.Status}}"],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return "Running", result.stdout.strip().split()[0]
+    return "Stopped", None
+
+
+def get_openclaw_version():
+    """Get OpenClaw version if container is running."""
+    result = subprocess.run(
+        ["docker", "exec", "privateclaw-openclaw", "openclaw", "--version"],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+    return None
+
+
 def show_menu():
-    """Show interactive menu for new users."""
+    """Show interactive menu styled like the plugin sidebar."""
+    # Get status info
+    container_status, uptime = get_container_status()
+    version = get_openclaw_version() if container_status == "Running" else None
+    has_transcribe, has_flag = get_cron_status()
+    auto_enabled = has_transcribe and has_flag
+
     print()
-    print("  PrivateClaw")
-    print("  " + "─" * 40)
-    print()
-    print("  PROCESSING")
-    print("    1) Transcribe files (audio/images/PDFs → markdown)")
-    print("    2) Flag sensitive content")
-    print("    3) Configure auto-processing")
-    print()
-    print("  OPENCLAW CONTAINER")
-    print("    4) Show status")
-    print("    5) View logs")
-    print("    6) Update to latest version")
-    print("    7) Reset container")
-    print()
-    print("  TELEGRAM")
-    print("    8) Configure Telegram bot")
-    print("    9) Approve pairing code")
-    print()
-    print("  ───────────────────────────────────────")
-    print("   10) First-time setup")
-    print("    q) Quit")
+    print("  ┌─────────────────────────────────────────┐")
+    print("  │  PrivateClaw                            │")
+    print("  ├─────────────────────────────────────────┤")
+
+    # Status section
+    status_icon = "●" if container_status == "Running" else "○"
+    status_color = "Running" if container_status == "Running" else "Stopped"
+    print(f"  │  Status: {status_icon} {status_color:<29}│")
+    if version:
+        print(f"  │  Version: {version:<28}│")
+    print("  ├─────────────────────────────────────────┤")
+
+    # Processing section
+    print("  │  Processing                             │")
+    print("  │    1) Transcribe Now                    │")
+    print("  │    2) Flag Content                      │")
+    auto_status = "☑" if auto_enabled else "☐"
+    print(f"  │    3) {auto_status} Auto-process (every min)         │")
+    print("  ├─────────────────────────────────────────┤")
+
+    # OpenClaw Container section
+    print("  │  OpenClaw Container                     │")
+    print("  │    4) Update    5) Reset    6) Logs     │")
+    print("  ├─────────────────────────────────────────┤")
+
+    # Telegram section
+    print("  │  Telegram                               │")
+    print("  │    7) Configure Bot                     │")
+    print("  │    8) Approve Pairing                   │")
+    print("  ├─────────────────────────────────────────┤")
+    print("  │    9) First-time Setup                  │")
+    print("  │    q) Quit                              │")
+    print("  └─────────────────────────────────────────┘")
     print()
 
     choice = input("  Enter choice: ").strip().lower()
@@ -146,18 +188,10 @@ def show_menu():
     elif choice == "3":
         configure_cron()
     elif choice == "4":
-        from privateclaw.container import cmd_status
-        from privateclaw.config import load_config
-        cmd_status(load_config())
-    elif choice == "5":
-        from privateclaw.container import cmd_logs
-        from privateclaw.config import load_config
-        cmd_logs(load_config())
-    elif choice == "6":
         from privateclaw.container import cmd_update
         from privateclaw.config import load_config
         cmd_update(load_config())
-    elif choice == "7":
+    elif choice == "5":
         from privateclaw.container import cmd_stop, cmd_build, cmd_start
         from privateclaw.config import load_config
         config = load_config()
@@ -166,7 +200,11 @@ def show_menu():
         cmd_build(config)
         cmd_start(config)
         print("  Container reset complete.")
-    elif choice == "8":
+    elif choice == "6":
+        from privateclaw.container import cmd_logs
+        from privateclaw.config import load_config
+        cmd_logs(load_config())
+    elif choice == "7":
         print()
         token = input("  Enter Telegram bot token: ").strip()
         if token:
@@ -175,7 +213,7 @@ def show_menu():
             cmd_telegram(load_config(), token)
         else:
             print("  No token provided.")
-    elif choice == "9":
+    elif choice == "8":
         print()
         code = input("  Enter pairing code (or press Enter to auto-approve): ").strip()
         from privateclaw.container import cmd_approve, cmd_approve_code
@@ -184,7 +222,7 @@ def show_menu():
             cmd_approve_code(load_config(), code)
         else:
             cmd_approve(load_config())
-    elif choice == "10":
+    elif choice == "9":
         from privateclaw.setup import main as setup_main
         setup_main()
     elif choice == "q":

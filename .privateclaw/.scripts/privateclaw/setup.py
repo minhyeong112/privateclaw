@@ -192,10 +192,10 @@ def setup_directories():
     config = load_config()
 
     dirs = [
-        PROJECT_ROOT / "0- archive",
-        PROJECT_ROOT / "1- transcriptions",
-        PROJECT_ROOT / "2- ready for human review",
-        PROJECT_ROOT / "2.5- stays private",
+        PROJECT_ROOT / "ARCHIVE",
+        PROJECT_ROOT / "TRANSCRIPTIONS",
+        PROJECT_ROOT / "FLAGGED",
+        PROJECT_ROOT / "PRIVATE",
         get_openclaw_dir(config) / "workspace",
         get_openclaw_config_dir(),
         PRIVATECLAW_DIR / "logs",

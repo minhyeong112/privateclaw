@@ -8,7 +8,7 @@ A privacy-first pipeline that processes your files locally, flags sensitive cont
 3. Review flagged files in Obsidian
 4. Drag approved files to the OpenClaw container for AI-powered processing via Telegram
 
-**Security model:** Everything outside the OpenClaw container is private. The container has full internet access but can ONLY see files you explicitly drag into `3- openclaw/workspace/`.
+**Security model:** Everything outside the OpenClaw container is private. The container has full internet access but can ONLY see files you explicitly drag into `OPENCLAW/workspace/`.
 
 ## Quick Start
 
@@ -83,7 +83,7 @@ uv run privateclaw approve YOUR_PAIRING_CODE
 
 Open Obsidian → "Open folder as vault" → Select the `privateclaw` folder.
 
-**You're done!** Chat with your bot on Telegram. It can access files in `3- openclaw/workspace/`.
+**You're done!** Chat with your bot on Telegram. It can access files in `OPENCLAW/workspace/`.
 
 ---
 
@@ -123,11 +123,11 @@ uv run privateclaw setup           # First-time setup
 ```
 privateclaw/                        ← Obsidian vault root
 ├── Start PrivateClaw.command       ← Double-click to open menu
-├── 0- archive/                     ← Original files preserved here
-├── 1- transcriptions/              ← Transcribed markdown files
-├── 2- ready for human review/      ← Flagged files with ----PRIVATE---- markers
-├── 2.5- stays private/             ← Files you want to keep local forever
-├── 3- openclaw/                    ← Docker mount point
+├── ARCHIVE/                        ← Original files preserved here
+├── TRANSCRIPTIONS/                 ← Transcribed markdown files
+├── FLAGGED/                        ← Flagged files with ----PRIVATE---- markers
+├── PRIVATE/                        ← Files you want to keep local forever
+├── OPENCLAW/                       ← Docker mount point
 │   └── workspace/                  ← ONLY this folder is visible to the AI
 ├── .openclaw/                      ← Container settings (hidden)
 ├── .obsidian/                      ← Obsidian vault config
@@ -141,19 +141,19 @@ Drop files here (audio, images, PDFs)
          ↓
     Auto-processing (or run: privateclaw transcribe)
          ↓
-    1- transcriptions/
+    TRANSCRIPTIONS/
          ↓
     Auto-processing (or run: privateclaw flag)
          ↓
-    2- ready for human review/
+    FLAGGED/
          ↓
     YOU review in Obsidian, remove/redact sensitive content
          ↓
     DRAG to destination:
          │
-         ├── 2.5- stays private/     → Stays local forever
+         ├── PRIVATE/              → Stays local forever
          │
-         └── 3- openclaw/workspace/  → Visible to AI via Telegram
+         └── OPENCLAW/workspace/   → Visible to AI via Telegram
 ```
 
 Enable auto-processing with `privateclaw cron` to automatically transcribe and flag files every minute.
@@ -168,14 +168,14 @@ Flagged sections look like this:
 ----PRIVATE (END)---- (SSN disclosed)
 ```
 
-Remove or redact these before moving files to the OpenClaw folder.
+Remove or redact these before moving files to the OPENCLAW folder.
 
 ## Security Model
 
 | Zone | Network | What AI Sees |
 |------|---------|--------------|
-| **Private Zone** (root, transcriptions, review) | Local only | Nothing — processed by local LLMs |
-| **OpenClaw Container** | Full internet | ONLY `3- openclaw/workspace/` |
+| **Private Zone** (root, transcriptions, flagged) | Local only | Nothing — processed by local LLMs |
+| **OpenClaw Container** | Full internet | ONLY `OPENCLAW/workspace/` |
 
 The container runs with:
 - Non-root user (UID 1000)

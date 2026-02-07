@@ -10,11 +10,11 @@ __pycache__/
 .privateclaw/logs/
 
 # User data — audio files, transcriptions, flagged files
-0- archive/
-1- transcriptions/
-2- ready for human review/
-2.5- stays private/
-3- openclaw/
+ARCHIVE/
+TRANSCRIPTIONS/
+FLAGGED/
+PRIVATE/
+OPENCLAW/
 
 # OpenClaw container config (contains tokens, pairing info)
 .openclaw/

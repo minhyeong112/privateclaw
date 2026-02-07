@@ -31,7 +31,7 @@ services:
       # OpenClaw config persistence (tokens, settings)
       - ../../.openclaw:/home/node/.openclaw
       # Workspace - THE ONLY HOST DATA IT CAN SEE
-      - "../../3- openclaw/workspace:/home/node/.openclaw/workspace"
+      - "../../OPENCLAW/workspace:/home/node/.openclaw/workspace"
 
     # Load environment from .env file
     env_file:
