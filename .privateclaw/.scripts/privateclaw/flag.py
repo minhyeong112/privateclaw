@@ -164,17 +164,7 @@ def build_summary_header(flagged_ranges: list[dict]) -> str:
     count = len(flagged_ranges)
 
     if count == 0:
-        return """---
-## Privacy Screening Summary
-
-**Status:** ✓ No sensitive content detected
-
-This file has been automatically screened for privacy-sensitive content.
-No items were flagged for review.
-
----
-
-"""
+        return "> **Privacy:** ✓ Clear\n\n"
 
     # Collect unique reasons
     reasons = []
@@ -184,25 +174,13 @@ No items were flagged for review.
             reasons.append(reason)
 
     items_word = "item" if count == 1 else "items"
-    header = f"""---
-## Privacy Screening Summary
-
-**Status:** ⚠️ {count} {items_word} flagged for review
-
-"""
+    header = f"> **Privacy:** ⚠️ {count} {items_word} flagged\n"
 
     if reasons:
-        header += "**Flagged content:**\n"
-        for i, reason in enumerate(reasons, 1):
-            header += f"{i}. {reason}\n"
-        header += "\n"
+        for reason in reasons:
+            header += f"> - {reason}\n"
 
-    header += """Look for `----PRIVATE (START)----` markers below to find flagged sections.
-Review and redact sensitive content before moving to OPENCLAW folder.
-
----
-
-"""
+    header += "\n"
     return header
 
 

@@ -37,18 +37,33 @@ def get_container_running():
     return bool(result.returncode == 0 and result.stdout.strip())
 
 
+def get_uv_path():
+    """Get full path to uv binary."""
+    result = subprocess.run(["which", "uv"], capture_output=True, text=True)
+    if result.returncode == 0:
+        return result.stdout.strip()
+    # Fallback to common locations
+    for path in ["/Users/mig/.local/bin/uv", "/opt/homebrew/bin/uv", "/usr/local/bin/uv"]:
+        if Path(path).exists():
+            return path
+    return "uv"  # Hope it's in PATH
+
+
 def set_cron(transcribe: bool, flag: bool):
     """Set cron jobs."""
     from privateclaw.config import PROJECT_ROOT
     scripts_dir = PROJECT_ROOT / ".privateclaw" / ".scripts"
+    log_dir = PROJECT_ROOT / ".privateclaw" / "logs"
+    log_dir.mkdir(exist_ok=True)
+    uv = get_uv_path()
 
     result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
     lines = [l for l in (result.stdout if result.returncode == 0 else "").split("\n") if "privateclaw" not in l]
 
     if transcribe:
-        lines.append(f"* * * * * cd {scripts_dir} && uv run privateclaw transcribe >> /dev/null 2>&1")
+        lines.append(f"* * * * * cd {scripts_dir} && {uv} run privateclaw transcribe >> {log_dir}/cron.log 2>&1")
     if flag:
-        lines.append(f"* * * * * cd {scripts_dir} && uv run privateclaw flag >> /dev/null 2>&1")
+        lines.append(f"* * * * * cd {scripts_dir} && {uv} run privateclaw flag >> {log_dir}/cron.log 2>&1")
 
     cron = "\n".join(lines).strip()
     if cron:
@@ -56,6 +71,59 @@ def set_cron(transcribe: bool, flag: bool):
         proc.communicate(cron + "\n")
     else:
         subprocess.run(["crontab", "-r"], capture_output=True)
+
+
+def show_settings(config: dict):
+    """Show and edit settings."""
+    import json
+    from privateclaw.config import PRIVATECLAW_DIR
+
+    config_path = PRIVATECLAW_DIR / "config.json"
+    criteria = config.get("flagging", {}).get("criteria", [])
+
+    while True:
+        print()
+        print("  ┌───────────────────────────────────┐")
+        print("  │  Settings                         │")
+        print("  ├───────────────────────────────────┤")
+        print("  │  Privacy screening criteria:      │")
+        for i, c in enumerate(criteria, 1):
+            # Truncate long criteria for display
+            display = c[:30] + "..." if len(c) > 30 else c
+            print(f"  │   {i}) {display:<29}│")
+        print("  ├───────────────────────────────────┤")
+        print("  │   a) Add criterion                │")
+        print("  │   d) Delete criterion             │")
+        print("  │   b) Back                         │")
+        print("  └───────────────────────────────────┘")
+        print()
+
+        choice = input("  > ").strip().lower()
+
+        if choice == "a":
+            print()
+            print("  Examples: 'SSN or social security numbers'")
+            print("            'Home addresses or physical locations'")
+            print("            'Bank account or credit card numbers'")
+            new_criterion = input("  New criterion: ").strip()
+            if new_criterion:
+                criteria.append(new_criterion)
+                config["flagging"]["criteria"] = criteria
+                config_path.write_text(json.dumps(config, indent=2))
+                print(f"  Added: {new_criterion}")
+        elif choice == "d":
+            num = input("  Delete which number? ").strip()
+            try:
+                idx = int(num) - 1
+                if 0 <= idx < len(criteria):
+                    removed = criteria.pop(idx)
+                    config["flagging"]["criteria"] = criteria
+                    config_path.write_text(json.dumps(config, indent=2))
+                    print(f"  Removed: {removed}")
+            except ValueError:
+                pass
+        elif choice == "b":
+            break
 
 
 def show_menu():
@@ -83,7 +151,7 @@ def show_menu():
         print(f"  │   3) Auto-process            [{auto:>3}]│")
         print("  ├───────────────────────────────────┤")
         print(f"  │   4) OpenClaw               [{oc:>3}] │")
-        print("  │   5) Telegram setup               │")
+        print("  │   5) Telegram    6) Settings      │")
         print("  ├───────────────────────────────────┤")
         print(f"  │   FLAGGED/  {flagged:>3} awaiting review  │")
         print(f"  │   PRIVATE/  {private:>3} files             │")
@@ -132,6 +200,9 @@ def show_menu():
                     cmd_approve_code(config, code)
                 else:
                     cmd_approve(config)
+        elif choice == "6":
+            show_settings(config)
+            config = load_config()  # Reload after changes
         elif choice == "s":
             from privateclaw.setup import main as setup_main
             setup_main()
