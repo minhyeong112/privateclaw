@@ -10,7 +10,7 @@ import ollama
 from privateclaw.config import (
     FileLock,
     get_archive_dir,
-    get_review_dir,
+    get_flagged_dir,
     get_root,
     get_transcriptions_dir,
     load_config,
@@ -159,10 +159,60 @@ def parse_llm_response(response_text: str) -> list[dict]:
     return []
 
 
+def build_summary_header(flagged_ranges: list[dict]) -> str:
+    """Build a summary header showing what was flagged."""
+    count = len(flagged_ranges)
+
+    if count == 0:
+        return """---
+## Privacy Screening Summary
+
+**Status:** ✓ No sensitive content detected
+
+This file has been automatically screened for privacy-sensitive content.
+No items were flagged for review.
+
+---
+
+"""
+
+    # Collect unique reasons
+    reasons = []
+    for entry in flagged_ranges:
+        reason = entry.get("reason", "").strip()
+        if reason and reason not in reasons:
+            reasons.append(reason)
+
+    items_word = "item" if count == 1 else "items"
+    header = f"""---
+## Privacy Screening Summary
+
+**Status:** ⚠️ {count} {items_word} flagged for review
+
+"""
+
+    if reasons:
+        header += "**Flagged content:**\n"
+        for i, reason in enumerate(reasons, 1):
+            header += f"{i}. {reason}\n"
+        header += "\n"
+
+    header += """Look for `----PRIVATE (START)----` markers below to find flagged sections.
+Review and redact sensitive content before moving to OPENCLAW folder.
+
+---
+
+"""
+    return header
+
+
 def insert_flags_by_lines(lines: list[str], flagged_ranges: list[dict]) -> str:
     """Insert PRIVATE markers around flagged line ranges."""
+    # Build summary header first (before we filter/merge ranges)
+    summary = build_summary_header(flagged_ranges)
+
     if not flagged_ranges:
-        return "\n".join(lines)
+        return summary + "\n".join(lines)
 
     START_MARKER = "----PRIVATE (START)----"
     END_MARKER = "----PRIVATE (END)----"
@@ -188,7 +238,7 @@ def insert_flags_by_lines(lines: list[str], flagged_ranges: list[dict]) -> str:
         ranges.append((start_idx, end_idx, reason))
 
     if not ranges:
-        return "\n".join(lines)
+        return summary + "\n".join(lines)
 
     # Sort and merge overlapping ranges
     ranges.sort()
@@ -210,7 +260,7 @@ def insert_flags_by_lines(lines: list[str], flagged_ranges: list[dict]) -> str:
         result_lines.insert(end_idx + 1, f"{END_MARKER}{reason_text}")
         result_lines.insert(start_idx, START_MARKER)
 
-    return "\n".join(result_lines)
+    return summary + "\n".join(result_lines)
 
 
 def flag_file(file_path: Path, config: dict) -> str:
@@ -273,10 +323,10 @@ def main():
         config = load_config()
         root = get_root(config)
         transcriptions_dir = get_transcriptions_dir(config)
-        review_dir = get_review_dir(config)
+        flagged_dir = get_flagged_dir(config)
         archive_dir = get_archive_dir(config)
 
-        review_dir.mkdir(exist_ok=True)
+        flagged_dir.mkdir(exist_ok=True)
         archive_dir.mkdir(exist_ok=True)
 
         files = discover_text_files(root, transcriptions_dir)
@@ -294,10 +344,10 @@ def main():
 
             # Write flagged version to review directory with _review suffix
             review_name = f"{file_path.stem}_review{file_path.suffix}"
-            out_path = review_dir / review_name
+            out_path = flagged_dir / review_name
             counter = 1
             while out_path.exists():
-                out_path = review_dir / f"{file_path.stem}_review_{counter}{file_path.suffix}"
+                out_path = flagged_dir / f"{file_path.stem}_review_{counter}{file_path.suffix}"
                 counter += 1
 
             out_path.write_text(flagged_text, encoding="utf-8")
