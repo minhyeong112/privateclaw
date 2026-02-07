@@ -159,12 +159,16 @@ def parse_llm_response(response_text: str) -> list[dict]:
     return []
 
 
-def build_summary_header(flagged_ranges: list[dict]) -> str:
+def build_summary_header(flagged_ranges: list[dict], notes: str = "") -> str:
     """Build a summary header showing what was flagged."""
     count = len(flagged_ranges)
 
     if count == 0:
-        return "> **Privacy:** ✓ Clear\n\n"
+        header = "> **Privacy:** ✓ No sensitive content detected\n"
+        if notes:
+            header += f"> {notes}\n"
+        header += "\n"
+        return header
 
     # Collect unique reasons
     reasons = []
@@ -174,7 +178,7 @@ def build_summary_header(flagged_ranges: list[dict]) -> str:
             reasons.append(reason)
 
     items_word = "item" if count == 1 else "items"
-    header = f"> **Privacy:** ⚠️ {count} {items_word} flagged\n"
+    header = f"> **Privacy:** ⚠️ {count} {items_word} flagged for review\n"
 
     if reasons:
         for reason in reasons:

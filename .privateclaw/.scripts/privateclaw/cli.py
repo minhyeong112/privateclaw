@@ -4,12 +4,6 @@ Usage:
     privateclaw                     # Interactive menu
     privateclaw transcribe          # Transcribe audio/images/PDFs
     privateclaw flag                # Flag sensitive content
-    privateclaw status              # Show container status
-    privateclaw logs                # Show container logs
-    privateclaw update              # Update OpenClaw
-    privateclaw reset               # Reset container
-    privateclaw telegram <token>    # Configure Telegram bot
-    privateclaw approve [code]      # Approve pairing requests
     privateclaw setup               # First-time setup
 """
 
@@ -19,7 +13,7 @@ from pathlib import Path
 
 
 def get_cron_status():
-    """Check if cron jobs are configured."""
+    """Returns (transcribe_enabled, flag_enabled)."""
     result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
     if result.returncode != 0:
         return False, False
@@ -42,11 +36,10 @@ def get_uv_path():
     result = subprocess.run(["which", "uv"], capture_output=True, text=True)
     if result.returncode == 0:
         return result.stdout.strip()
-    # Fallback to common locations
     for path in ["/Users/mig/.local/bin/uv", "/opt/homebrew/bin/uv", "/usr/local/bin/uv"]:
         if Path(path).exists():
             return path
-    return "uv"  # Hope it's in PATH
+    return "uv"
 
 
 def set_cron(transcribe: bool, flag: bool):
@@ -73,140 +66,273 @@ def set_cron(transcribe: bool, flag: bool):
         subprocess.run(["crontab", "-r"], capture_output=True)
 
 
-def show_settings(config: dict):
-    """Show and edit settings."""
+def show_menu():
+    """Interactive modular menu."""
+    from privateclaw.config import load_config, get_flagged_dir, get_private_dir, get_root
     import json
     from privateclaw.config import PRIVATECLAW_DIR
 
-    config_path = PRIVATECLAW_DIR / "config.json"
-    criteria = config.get("flagging", {}).get("criteria", [])
-
-    while True:
-        print()
-        print("  ┌───────────────────────────────────┐")
-        print("  │  Settings                         │")
-        print("  ├───────────────────────────────────┤")
-        print("  │  Privacy screening criteria:      │")
-        for i, c in enumerate(criteria, 1):
-            # Truncate long criteria for display
-            display = c[:30] + "..." if len(c) > 30 else c
-            print(f"  │   {i}) {display:<29}│")
-        print("  ├───────────────────────────────────┤")
-        print("  │   a) Add criterion                │")
-        print("  │   d) Delete criterion             │")
-        print("  │   b) Back                         │")
-        print("  └───────────────────────────────────┘")
-        print()
-
-        choice = input("  > ").strip().lower()
-
-        if choice == "a":
-            print()
-            print("  Examples: 'SSN or social security numbers'")
-            print("            'Home addresses or physical locations'")
-            print("            'Bank account or credit card numbers'")
-            new_criterion = input("  New criterion: ").strip()
-            if new_criterion:
-                criteria.append(new_criterion)
-                config["flagging"]["criteria"] = criteria
-                config_path.write_text(json.dumps(config, indent=2))
-                print(f"  Added: {new_criterion}")
-        elif choice == "d":
-            num = input("  Delete which number? ").strip()
-            try:
-                idx = int(num) - 1
-                if 0 <= idx < len(criteria):
-                    removed = criteria.pop(idx)
-                    config["flagging"]["criteria"] = criteria
-                    config_path.write_text(json.dumps(config, indent=2))
-                    print(f"  Removed: {removed}")
-            except ValueError:
-                pass
-        elif choice == "b":
-            break
-
-
-def show_menu():
-    """Interactive menu."""
-    from privateclaw.config import load_config, get_flagged_dir, get_private_dir
-
     config = load_config()
+    config_path = PRIVATECLAW_DIR / "config.json"
 
     while True:
         t_on, f_on = get_cron_status()
         oc_on = get_container_running()
 
-        flagged = sum(1 for f in get_flagged_dir(config).iterdir() if f.is_file()) if get_flagged_dir(config).exists() else 0
-        private = sum(1 for f in get_private_dir(config).iterdir() if f.is_file()) if get_private_dir(config).exists() else 0
+        # File counts
+        root = get_root(config)
+        flagged_dir = get_flagged_dir(config)
+        private_dir = get_private_dir(config)
 
-        auto = "ON" if (t_on and f_on) else "OFF"
-        oc = "ON" if oc_on else "OFF"
+        media_exts = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".png", ".jpg", ".jpeg", ".pdf"}
+        pending_transcribe = sum(1 for f in root.iterdir() if f.is_file() and f.suffix.lower() in media_exts) if root.exists() else 0
+        flagged = sum(1 for f in flagged_dir.iterdir() if f.is_file()) if flagged_dir.exists() else 0
+        private = sum(1 for f in private_dir.iterdir() if f.is_file()) if private_dir.exists() else 0
+
+        oc_status = "ON " if oc_on else "OFF"
+        t_status = "ON " if t_on else "OFF"
+        f_status = "ON " if f_on else "OFF"
 
         print()
-        print("  ┌───────────────────────────────────┐")
-        print("  │  PrivateClaw                      │")
-        print("  ├───────────────────────────────────┤")
-        print("  │   1) Transcribe now               │")
-        print("  │   2) Flag now                     │")
-        print(f"  │   3) Auto-process            [{auto:>3}]│")
-        print("  ├───────────────────────────────────┤")
-        print(f"  │   4) OpenClaw               [{oc:>3}] │")
-        print("  │   5) Telegram    6) Settings      │")
-        print("  ├───────────────────────────────────┤")
-        print(f"  │   FLAGGED/  {flagged:>3} awaiting review  │")
-        print(f"  │   PRIVATE/  {private:>3} files             │")
-        print("  ├───────────────────────────────────┤")
-        print("  │   s) Setup    q) Quit             │")
-        print("  └───────────────────────────────────┘")
+        print("  ╔═══════════════════════════════════════╗")
+        print("  ║  PrivateClaw                          ║")
+        print("  ╠═══════════════════════════════════════╣")
+        print(f"  ║  1. OpenClaw                    [{oc_status}] ║")
+        print("  ║     AI assistant via Telegram         ║")
+        if oc_on:
+            print("  ║     → dashboard • logs • telegram     ║")
+        else:
+            print("  ║     → start • setup • telegram        ║")
+        print("  ╠═══════════════════════════════════════╣")
+        print(f"  ║  2. Transcriber                 [{t_status}] ║")
+        print(f"  ║     {pending_transcribe} pending → auto every 1 min      ║")
+        print("  ║     → run now • settings              ║")
+        print("  ╠═══════════════════════════════════════╣")
+        print(f"  ║  3. Flagger                     [{f_status}] ║")
+        print(f"  ║     {flagged} awaiting review                 ║")
+        print("  ║     → run now • settings              ║")
+        print("  ╠═══════════════════════════════════════╣")
+        print(f"  ║  PRIVATE/  {private} files (never shared)     ║")
+        print("  ╠═══════════════════════════════════════╣")
+        print("  ║  s) First-time setup    q) Quit       ║")
+        print("  ╚═══════════════════════════════════════╝")
         print()
 
         choice = input("  > ").strip().lower()
 
         if choice == "1":
-            from privateclaw.transcribe import main as transcribe_main
-            transcribe_main()
+            menu_openclaw(config)
         elif choice == "2":
-            from privateclaw.flag import main as flag_main
-            flag_main()
+            menu_transcriber(config, config_path)
         elif choice == "3":
-            if t_on and f_on:
-                set_cron(False, False)
-                print("  Auto-process disabled.")
-            else:
-                set_cron(True, True)
-                print("  Auto-process enabled (every minute).")
-        elif choice == "4":
+            menu_flagger(config, config_path)
+        elif choice == "s":
+            from privateclaw.setup import main as setup_main
+            setup_main()
+        elif choice == "q":
+            break
+
+
+def menu_openclaw(config):
+    """OpenClaw submenu."""
+    while True:
+        oc_on = get_container_running()
+        status = "RUNNING" if oc_on else "STOPPED"
+
+        print()
+        print("  ┌─────────────────────────────────┐")
+        print(f"  │  OpenClaw                [{status:>7}] │")
+        print("  ├─────────────────────────────────┤")
+        if oc_on:
+            print("  │  1) Open dashboard              │")
+            print("  │  2) View logs                   │")
+            print("  │  3) Stop                        │")
+        else:
+            print("  │  1) Start                       │")
+            print("  │  2) View logs                   │")
+            print("  │  3) Rebuild                     │")
+        print("  ├─────────────────────────────────┤")
+        print("  │  4) Telegram: set bot token     │")
+        print("  │  5) Telegram: approve pairing   │")
+        print("  │  6) Update to latest            │")
+        print("  ├─────────────────────────────────┤")
+        print("  │  b) Back                        │")
+        print("  └─────────────────────────────────┘")
+        print()
+
+        choice = input("  > ").strip().lower()
+
+        if choice == "1":
             if oc_on:
                 from privateclaw.container import cmd_url
                 cmd_url(config)
             else:
                 from privateclaw.container import cmd_start
                 cmd_start(config)
+        elif choice == "2":
+            from privateclaw.container import cmd_logs
+            cmd_logs(config)
+        elif choice == "3":
+            if oc_on:
+                from privateclaw.container import cmd_stop
+                cmd_stop(config)
+                print("  Stopped.")
+            else:
+                from privateclaw.container import cmd_build
+                cmd_build(config)
+        elif choice == "4":
+            token = input("  Bot token: ").strip()
+            if token:
+                from privateclaw.container import cmd_telegram
+                cmd_telegram(config, token)
         elif choice == "5":
-            print()
-            print("  1) Set bot token")
-            print("  2) Approve pairing")
-            print("  b) Back")
-            sub = input("  > ").strip()
-            if sub == "1":
-                token = input("  Token: ").strip()
-                if token:
-                    from privateclaw.container import cmd_telegram
-                    cmd_telegram(config, token)
-            elif sub == "2":
-                code = input("  Code (or Enter for auto): ").strip()
-                from privateclaw.container import cmd_approve, cmd_approve_code
-                if code:
-                    cmd_approve_code(config, code)
-                else:
-                    cmd_approve(config)
+            code = input("  Pairing code (or Enter for auto): ").strip()
+            from privateclaw.container import cmd_approve, cmd_approve_code
+            if code:
+                cmd_approve_code(config, code)
+            else:
+                cmd_approve(config)
         elif choice == "6":
-            show_settings(config)
-            config = load_config()  # Reload after changes
-        elif choice == "s":
-            from privateclaw.setup import main as setup_main
-            setup_main()
-        elif choice == "q":
+            from privateclaw.container import cmd_update
+            cmd_update(config)
+        elif choice == "b":
+            break
+
+
+def menu_transcriber(config, config_path):
+    """Transcriber submenu."""
+    import json
+    from privateclaw.config import get_root, get_transcriptions_dir
+
+    while True:
+        t_on, f_on = get_cron_status()
+        root = get_root(config)
+        trans_dir = get_transcriptions_dir(config)
+
+        media_exts = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".png", ".jpg", ".jpeg", ".pdf"}
+        pending = sum(1 for f in root.iterdir() if f.is_file() and f.suffix.lower() in media_exts) if root.exists() else 0
+        completed = sum(1 for f in trans_dir.iterdir() if f.is_file()) if trans_dir.exists() else 0
+
+        model = config.get("transcription", {}).get("whisper_model", "large-v3")
+        status = "ON " if t_on else "OFF"
+
+        print()
+        print("  ┌─────────────────────────────────┐")
+        print(f"  │  Transcriber               [{status}] │")
+        print("  ├─────────────────────────────────┤")
+        print(f"  │  Pending: {pending}  Completed: {completed:<6} │")
+        print(f"  │  Model: {model:<22}│")
+        print("  ├─────────────────────────────────┤")
+        print("  │  1) Run now                     │")
+        toggle = "Disable" if t_on else "Enable"
+        print(f"  │  2) {toggle} auto (every 1 min)    │")
+        print("  ├─────────────────────────────────┤")
+        print("  │  b) Back                        │")
+        print("  └─────────────────────────────────┘")
+        print()
+
+        choice = input("  > ").strip().lower()
+
+        if choice == "1":
+            print("  Running transcription...")
+            from privateclaw.transcribe import main as transcribe_main
+            transcribe_main()
+            print("  Done.")
+        elif choice == "2":
+            set_cron(not t_on, f_on)
+            action = "disabled" if t_on else "enabled"
+            print(f"  Auto-transcribe {action}.")
+        elif choice == "b":
+            break
+
+
+def menu_flagger(config, config_path):
+    """Flagger submenu."""
+    import json
+    from privateclaw.config import get_transcriptions_dir, get_flagged_dir
+
+    while True:
+        t_on, f_on = get_cron_status()
+        trans_dir = get_transcriptions_dir(config)
+        flagged_dir = get_flagged_dir(config)
+
+        pending = sum(1 for f in trans_dir.iterdir() if f.is_file()) if trans_dir.exists() else 0
+        flagged = sum(1 for f in flagged_dir.iterdir() if f.is_file()) if flagged_dir.exists() else 0
+
+        model = config.get("flagging", {}).get("ollama_model", "qwen2.5:14b")
+        criteria = config.get("flagging", {}).get("criteria", [])
+        status = "ON " if f_on else "OFF"
+
+        print()
+        print("  ┌─────────────────────────────────┐")
+        print(f"  │  Flagger                   [{status}] │")
+        print("  ├─────────────────────────────────┤")
+        print(f"  │  Pending: {pending}  Flagged: {flagged:<8} │")
+        print(f"  │  Model: {model:<22}│")
+        print("  ├─────────────────────────────────┤")
+        print("  │  1) Run now                     │")
+        toggle = "Disable" if f_on else "Enable"
+        print(f"  │  2) {toggle} auto (every 1 min)    │")
+        print(f"  │  3) Edit criteria ({len(criteria)} rules)    │")
+        print("  ├─────────────────────────────────┤")
+        print("  │  b) Back                        │")
+        print("  └─────────────────────────────────┘")
+        print()
+
+        choice = input("  > ").strip().lower()
+
+        if choice == "1":
+            print("  Running flagger...")
+            from privateclaw.flag import main as flag_main
+            flag_main()
+            print("  Done.")
+        elif choice == "2":
+            set_cron(t_on, not f_on)
+            action = "disabled" if f_on else "enabled"
+            print(f"  Auto-flag {action}.")
+        elif choice == "3":
+            edit_criteria(config, config_path)
+        elif choice == "b":
+            break
+
+
+def edit_criteria(config, config_path):
+    """Edit flagging criteria."""
+    import json
+    criteria = config.get("flagging", {}).get("criteria", [])
+
+    while True:
+        print()
+        print("  Screening criteria:")
+        for i, c in enumerate(criteria, 1):
+            display = c[:40] + "..." if len(c) > 40 else c
+            print(f"    {i}. {display}")
+        print()
+        print("  a) Add  d) Delete  b) Back")
+        print()
+
+        choice = input("  > ").strip().lower()
+
+        if choice == "a":
+            print("  Example: 'Bank account numbers'")
+            new = input("  Add: ").strip()
+            if new:
+                criteria.append(new)
+                config["flagging"]["criteria"] = criteria
+                config_path.write_text(json.dumps(config, indent=2))
+                print(f"  Added.")
+        elif choice == "d":
+            num = input("  Delete #: ").strip()
+            try:
+                idx = int(num) - 1
+                if 0 <= idx < len(criteria):
+                    removed = criteria.pop(idx)
+                    config["flagging"]["criteria"] = criteria
+                    config_path.write_text(json.dumps(config, indent=2))
+                    print(f"  Removed: {removed[:30]}...")
+            except ValueError:
+                pass
+        elif choice == "b":
             break
 
 
