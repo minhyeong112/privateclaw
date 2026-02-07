@@ -20,20 +20,24 @@ A privacy-first pipeline that processes your files locally, flags sensitive cont
 
 ### Option A: Double-Click Setup (Easiest)
 
-1. Clone the repo: `git clone https://github.com/yourusername/privateclaw.git`
+1. Clone the repo: `git clone https://github.com/minhyeong112/privateclaw.git`
 2. Double-click **`Start PrivateClaw.command`** in Finder
-3. Follow the interactive menu
+3. Press `s` for first-time setup (installs Docker, Ollama, ffmpeg, etc.)
+4. Enable auto-processing:
+   - Press `2` (Transcriber) → `2` (Enable auto)
+   - Press `b` (Back) → `3` (Flagger) → `2` (Enable auto)
 
 ### Option B: Command Line Setup
 
 ```bash
-git clone https://github.com/yourusername/privateclaw.git
+git clone https://github.com/minhyeong112/privateclaw.git
 cd privateclaw/.privateclaw/.scripts
 uv sync
 uv run privateclaw setup
+uv run privateclaw   # Opens menu to enable auto-processing
 ```
 
-The setup script will install Docker, Ollama, Tesseract, and Obsidian automatically via Homebrew.
+The setup script installs Docker, Ollama, Tesseract, ffmpeg, and Obsidian via Homebrew.
 
 ### Configure Your API Key
 
@@ -89,32 +93,23 @@ Open Obsidian → "Open folder as vault" → Select the `privateclaw` folder.
 
 ## Commands
 
-All commands are run from `.privateclaw/.scripts`:
+Double-click `Start PrivateClaw.command` or run from `.privateclaw/.scripts`:
 
 ```bash
 cd .privateclaw/.scripts
+uv run privateclaw              # Interactive menu (recommended)
 
-# Interactive menu (or double-click Start PrivateClaw.command)
-uv run privateclaw
-
-# Processing
-uv run privateclaw transcribe      # Transcribe audio/images/PDFs
-uv run privateclaw flag            # Flag sensitive content
-uv run privateclaw cron            # Configure auto-processing
-
-# Container
-uv run privateclaw status          # Check status
-uv run privateclaw logs            # View logs
-uv run privateclaw update          # Update OpenClaw to latest
-uv run privateclaw reset           # Reset container (rebuild)
-
-# Telegram
-uv run privateclaw telegram TOKEN  # Configure Telegram bot
-uv run privateclaw approve CODE    # Approve pairing code
-
-# Setup
-uv run privateclaw setup           # First-time setup
+# Or run directly:
+uv run privateclaw transcribe   # Transcribe audio/images/PDFs
+uv run privateclaw flag         # Flag sensitive content
+uv run privateclaw setup        # First-time setup
+uv run privateclaw start        # Start OpenClaw container
+uv run privateclaw logs         # View container logs
 ```
+
+**Enable auto-processing via the menu:**
+- Transcriber → Enable auto (processes files every minute)
+- Flagger → Enable auto (flags content every minute)
 
 ---
 
@@ -156,7 +151,7 @@ Drop files here (audio, images, PDFs)
          └── OPENCLAW/workspace/   → Visible to AI via Telegram
 ```
 
-Enable auto-processing with `privateclaw cron` to automatically transcribe and flag files every minute.
+Enable auto-processing via the menu (Transcriber → Enable auto, Flagger → Enable auto) to automatically process files every minute.
 
 ### Privacy Markers
 
