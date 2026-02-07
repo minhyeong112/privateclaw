@@ -50,8 +50,16 @@ def set_cron(transcribe: bool, flag: bool):
     log_dir.mkdir(exist_ok=True)
     uv = get_uv_path()
 
+    # Get current PATH including homebrew for ffmpeg, ollama, etc.
+    path_dirs = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+    path_env = ":".join(path_dirs)
+
     result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-    lines = [l for l in (result.stdout if result.returncode == 0 else "").split("\n") if "privateclaw" not in l]
+    lines = [l for l in (result.stdout if result.returncode == 0 else "").split("\n")
+             if "privateclaw" not in l and not l.startswith("PATH=")]
+
+    # Add PATH at the top
+    lines.insert(0, f"PATH={path_env}")
 
     if transcribe:
         lines.append(f"* * * * * cd {scripts_dir} && {uv} run privateclaw transcribe >> {log_dir}/cron.log 2>&1")
