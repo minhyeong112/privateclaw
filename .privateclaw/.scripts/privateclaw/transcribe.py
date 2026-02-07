@@ -1,7 +1,11 @@
 """Transcription pipeline: converts audio, images, and PDFs to markdown text files."""
 
+import os
 import shutil
 from pathlib import Path
+
+# Ensure ffmpeg is in PATH for Whisper (cron doesn't inherit shell PATH)
+os.environ["PATH"] = "/opt/homebrew/bin:/usr/local/bin:" + os.environ.get("PATH", "")
 
 import fitz  # PyMuPDF
 import pytesseract
