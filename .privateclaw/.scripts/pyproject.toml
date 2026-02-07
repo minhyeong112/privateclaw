@@ -14,10 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-pc-transcribe = "privateclaw.transcribe:main"
-pc-flag = "privateclaw.flag:main"
-pc-container = "privateclaw.container:main"
-pc-setup = "privateclaw.setup:main"
+privateclaw = "privateclaw.cli:main"
 
 [build-system]
 requires = ["hatchling"]

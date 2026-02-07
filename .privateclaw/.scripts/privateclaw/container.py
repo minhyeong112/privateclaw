@@ -1,17 +1,4 @@
-"""Container management for OpenClaw sandbox.
-
-Usage:
-    pc-container start              # Start the OpenClaw container
-    pc-container stop               # Stop the container
-    pc-container restart            # Restart the container
-    pc-container status             # Show container status
-    pc-container logs               # Show container logs
-    pc-container build              # Build/rebuild the container image
-    pc-container shell              # Open a shell inside the container
-    pc-container url                # Get tokenized dashboard URL
-    pc-container telegram <token>   # Configure Telegram bot
-    pc-container approve            # Approve pending device/pairing requests
-"""
+"""Container management for OpenClaw sandbox."""
 
 import subprocess
 import sys
@@ -122,7 +109,7 @@ def cmd_status(config: dict):
     """Show container status."""
     if not is_docker_running():
         print("Docker daemon is not running.")
-        print("Run 'pc-container start' to start Docker and the container.")
+        print("Run 'privateclaw start' to start Docker and the container.")
         return
     result = run_compose(["ps"], capture=True)
     print(result.stdout)
@@ -134,7 +121,7 @@ def cmd_logs(config: dict):
     """Show container logs."""
     if not is_docker_running():
         print("Docker daemon is not running.")
-        print("Run 'pc-container start' to start Docker and the container.")
+        print("Run 'privateclaw start' to start Docker and the container.")
         return
     run_compose(["logs", "-f", "--tail=100"])
 
@@ -154,11 +141,62 @@ def cmd_build(config: dict):
         sys.exit(1)
 
 
+def cmd_version(config: dict):
+    """Show OpenClaw version."""
+    if not is_docker_running():
+        print("Docker daemon is not running.")
+        print("Run 'privateclaw start' to start Docker and the container.")
+        return
+    result = subprocess.run(
+        ["docker", "exec", "privateclaw-openclaw", "openclaw", "--version"],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode == 0:
+        print(f"OpenClaw version: {result.stdout.strip()}")
+    else:
+        print("Could not get version. Is the container running?")
+
+
+def cmd_update(config: dict):
+    """Update OpenClaw to the latest version."""
+    if not ensure_docker_running():
+        sys.exit(1)
+
+    # Get current version
+    result = subprocess.run(
+        ["docker", "exec", "privateclaw-openclaw", "openclaw", "--version"],
+        capture_output=True,
+        text=True
+    )
+    old_version = result.stdout.strip() if result.returncode == 0 else "unknown"
+    logger.info(f"Current version: {old_version}")
+
+    # Stop, rebuild, start
+    logger.info("Updating OpenClaw...")
+    cmd_stop(config)
+    cmd_build(config)
+    cmd_start(config)
+
+    # Get new version
+    result = subprocess.run(
+        ["docker", "exec", "privateclaw-openclaw", "openclaw", "--version"],
+        capture_output=True,
+        text=True
+    )
+    new_version = result.stdout.strip() if result.returncode == 0 else "unknown"
+
+    if old_version == new_version:
+        logger.info(f"Already on latest version: {new_version}")
+    else:
+        logger.info(f"Updated: {old_version} → {new_version}")
+
+
 def cmd_shell(config: dict):
     """Open a shell inside the container."""
     if not is_docker_running():
         print("Docker daemon is not running.")
-        print("Run 'pc-container start' to start Docker and the container.")
+        print("Run 'privateclaw start' to start Docker and the container.")
         return
     subprocess.run(["docker", "exec", "-it", "privateclaw-openclaw", "/bin/bash"])
 
@@ -167,7 +205,7 @@ def cmd_url(config: dict):
     """Get tokenized dashboard URL."""
     if not is_docker_running():
         print("Docker daemon is not running.")
-        print("Run 'pc-container start' to start Docker and the container.")
+        print("Run 'privateclaw start' to start Docker and the container.")
         return
     result = subprocess.run(
         ["docker", "exec", "privateclaw-openclaw", "openclaw", "dashboard", "--no-open"],
@@ -186,11 +224,11 @@ def cmd_telegram(config: dict, token: str = None):
     """Configure Telegram bot."""
     if not is_docker_running():
         print("Docker daemon is not running.")
-        print("Run 'pc-container start' to start Docker and the container.")
+        print("Run 'privateclaw start' to start Docker and the container.")
         return
 
     if not token:
-        print("Usage: pc-container telegram <bot_token>")
+        print("Usage: privateclaw telegram <bot_token>")
         print("")
         print("To get a bot token:")
         print("  1. Open Telegram and message @BotFather")
@@ -221,7 +259,7 @@ def cmd_telegram(config: dict, token: str = None):
         print("Next steps:")
         print("  1. Message your bot on Telegram")
         print("  2. You'll receive a pairing code")
-        print("  3. Run: pc-container approve")
+        print("  3. Run: privateclaw approve")
     else:
         print(f"Failed to configure Telegram: {result.stderr}")
 
@@ -230,7 +268,7 @@ def cmd_approve(config: dict):
     """Approve pending device and pairing requests."""
     if not is_docker_running():
         print("Docker daemon is not running.")
-        print("Run 'pc-container start' to start Docker and the container.")
+        print("Run 'privateclaw start' to start Docker and the container.")
         return
 
     # Check for pending device pairing requests
@@ -288,11 +326,11 @@ def cmd_approve(config: dict):
         print("No pending requests found.")
         print("")
         print("If you're waiting for a Telegram pairing code, make sure you've:")
-        print("  1. Configured your bot: pc-container telegram <token>")
+        print("  1. Configured your bot: privateclaw telegram <token>")
         print("  2. Messaged your bot on Telegram")
         print("")
         print("Then run this command again with the pairing code:")
-        print("  pc-container approve <pairing_code>")
+        print("  privateclaw approve <pairing_code>")
 
 
 def cmd_approve_code(config: dict, code: str):
@@ -330,6 +368,8 @@ def main():
         "status": cmd_status,
         "logs": cmd_logs,
         "build": cmd_build,
+        "update": cmd_update,
+        "version": cmd_version,
         "shell": cmd_shell,
         "url": cmd_url,
         "telegram": lambda c: cmd_telegram(c, args[1] if len(args) > 1 else None),

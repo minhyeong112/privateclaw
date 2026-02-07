@@ -10,7 +10,7 @@ A privacy-first pipeline that processes your files locally, flags sensitive cont
 
 **Security model:** Everything outside the OpenClaw container is private. The container has full internet access but can ONLY see files you explicitly drag into `3- openclaw/workspace/`.
 
-## Quick Start (5 minutes)
+## Quick Start
 
 ### Prerequisites
 
@@ -18,21 +18,24 @@ A privacy-first pipeline that processes your files locally, flags sensitive cont
 - **[uv](https://docs.astral.sh/uv/)** — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **[Anthropic account](https://console.anthropic.com/)** — for the AI (Claude)
 
-### Step 1: Clone and Install
+### Option A: Double-Click Setup (Easiest)
+
+1. Clone the repo: `git clone https://github.com/yourusername/privateclaw.git`
+2. Double-click **`Start PrivateClaw.command`** in Finder
+3. Follow the interactive menu
+
+### Option B: Command Line Setup
 
 ```bash
 git clone https://github.com/yourusername/privateclaw.git
-cd privateclaw
-
-# Install dependencies and run setup
-cd .privateclaw/.scripts
+cd privateclaw/.privateclaw/.scripts
 uv sync
-uv run pc-setup
+uv run privateclaw setup
 ```
 
 The setup script will install Docker, Ollama, Tesseract, and Obsidian automatically via Homebrew.
 
-### Step 2: Configure Your API Key
+### Configure Your API Key
 
 ```bash
 # Edit .env and add your Anthropic API key/token
@@ -45,40 +48,38 @@ Add your token:
 ANTHROPIC_API_KEY=sk-ant-your_token_here
 ```
 
-### Step 3: Start the Container
+### Start the Container
 
 ```bash
-uv run pc-container start
+uv run privateclaw start
 ```
 
-### Step 4: Connect the Dashboard (First Time Only)
+### Connect the Dashboard (First Time Only)
 
 ```bash
-# Get the tokenized URL
-uv run pc-container url
+uv run privateclaw url
 ```
 
 Open the URL in your browser and click **Connect**.
 
-### Step 5: Set Up Telegram
+### Set Up Telegram
 
 1. Open Telegram and message **@BotFather**
 2. Send `/newbot` and follow the prompts
 3. Copy the bot token (looks like `123456789:ABCdefGHI...`)
 
 ```bash
-# Configure your bot
-uv run pc-container telegram YOUR_BOT_TOKEN
+uv run privateclaw telegram YOUR_BOT_TOKEN
 ```
 
 4. Message your new bot on Telegram — you'll receive a pairing code
 5. Approve the pairing:
 
 ```bash
-uv run pc-container approve YOUR_PAIRING_CODE
+uv run privateclaw approve YOUR_PAIRING_CODE
 ```
 
-### Step 6: Open in Obsidian
+### Open in Obsidian
 
 Open Obsidian → "Open folder as vault" → Select the `privateclaw` folder.
 
@@ -86,10 +87,42 @@ Open Obsidian → "Open folder as vault" → Select the `privateclaw` folder.
 
 ---
 
+## Commands
+
+All commands are run from `.privateclaw/.scripts`:
+
+```bash
+cd .privateclaw/.scripts
+
+# Interactive menu (or double-click Start PrivateClaw.command)
+uv run privateclaw
+
+# Processing
+uv run privateclaw transcribe      # Transcribe audio/images/PDFs
+uv run privateclaw flag            # Flag sensitive content
+uv run privateclaw cron            # Configure auto-processing
+
+# Container
+uv run privateclaw status          # Check status
+uv run privateclaw logs            # View logs
+uv run privateclaw update          # Update OpenClaw to latest
+uv run privateclaw reset           # Reset container (rebuild)
+
+# Telegram
+uv run privateclaw telegram TOKEN  # Configure Telegram bot
+uv run privateclaw approve CODE    # Approve pairing code
+
+# Setup
+uv run privateclaw setup           # First-time setup
+```
+
+---
+
 ## Folder Structure
 
 ```
 privateclaw/                        ← Obsidian vault root
+├── Start PrivateClaw.command       ← Double-click to open menu
 ├── 0- archive/                     ← Original files preserved here
 ├── 1- transcriptions/              ← Transcribed markdown files
 ├── 2- ready for human review/      ← Flagged files with ----PRIVATE---- markers
@@ -101,61 +134,16 @@ privateclaw/                        ← Obsidian vault root
 └── .privateclaw/                   ← Configuration and scripts
 ```
 
-## Container Commands
-
-```bash
-cd .privateclaw/.scripts
-
-uv run pc-container start           # Start the container
-uv run pc-container stop            # Stop the container
-uv run pc-container restart         # Restart
-uv run pc-container status          # Check status
-uv run pc-container logs            # View logs
-uv run pc-container url             # Get dashboard URL
-uv run pc-container telegram TOKEN  # Configure Telegram bot
-uv run pc-container approve CODE    # Approve pairing code
-uv run pc-container build           # Rebuild image
-uv run pc-container shell           # Shell into container
-```
-
-## Processing Commands
-
-```bash
-cd .privateclaw/.scripts
-
-# Transcribe audio/images/PDFs to markdown
-uv run pc-transcribe
-
-# Flag sensitive content
-uv run pc-flag
-
-# Check setup status
-uv run pc-setup --check
-```
-
-### Automated Processing (Cron)
-
-```bash
-crontab -e
-```
-
-Add these lines (adjust path):
-
-```cron
-* * * * * /path/to/privateclaw/.privateclaw/.scripts/cron_runner.sh transcribe
-* * * * * /path/to/privateclaw/.privateclaw/.scripts/cron_runner.sh flag
-```
-
 ## How It Works
 
 ```
 Drop files here (audio, images, PDFs)
          ↓
-    pc-transcribe (local Whisper + OCR)
+    Auto-processing (or run: privateclaw transcribe)
          ↓
     1- transcriptions/
          ↓
-    pc-flag (local Ollama LLM)
+    Auto-processing (or run: privateclaw flag)
          ↓
     2- ready for human review/
          ↓
@@ -167,6 +155,8 @@ Drop files here (audio, images, PDFs)
          │
          └── 3- openclaw/workspace/  → Visible to AI via Telegram
 ```
+
+Enable auto-processing with `privateclaw cron` to automatically transcribe and flag files every minute.
 
 ### Privacy Markers
 
@@ -225,19 +215,19 @@ Edit the `criteria` array in `config.json` to customize.
 
 **Container won't start?**
 ```bash
-uv run pc-container build   # Rebuild the image
+uv run privateclaw build   # Rebuild the image
 ```
 
 **Dashboard won't connect?**
 ```bash
-uv run pc-container url     # Get fresh tokenized URL
-uv run pc-container approve # Approve pending device requests
+uv run privateclaw url     # Get fresh tokenized URL
+uv run privateclaw approve # Approve pending device requests
 ```
 
 **Telegram bot not responding?**
 ```bash
-uv run pc-container logs    # Check for errors
-uv run pc-container restart # Restart container
+uv run privateclaw logs    # Check for errors
+uv run privateclaw restart # Restart container
 ```
 
 ## License
