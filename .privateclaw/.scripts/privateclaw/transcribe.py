@@ -47,6 +47,10 @@ def discover_files(root: Path, config: dict) -> dict[str, list[Path]]:
         elif ext in pdf_exts:
             files["pdf"].append(f)
 
+    # Sort by file size (smallest first) so quick files complete early
+    for key in files:
+        files[key].sort(key=lambda f: f.stat().st_size)
+
     return files
 
 
