@@ -21,7 +21,7 @@ A privacy-first pipeline that processes your files locally, flags sensitive cont
 ### Option A: Double-Click Setup (Easiest)
 
 1. Clone the repo: `git clone https://github.com/minhyeong112/privateclaw.git`
-2. Double-click **`Start PrivateClaw.command`** in Finder
+2. Double-click **`PrivateClaw.command`** in Finder
 3. Press `s` for first-time setup (installs Docker, Ollama, ffmpeg, etc.)
 4. Enable auto-processing:
    - Press `2` (Transcriber) → `2` (Enable auto)
@@ -93,7 +93,7 @@ Open Obsidian → "Open folder as vault" → Select the `privateclaw` folder.
 
 ## Commands
 
-Double-click `Start PrivateClaw.command` or run from `.privateclaw/.scripts`:
+Double-click `PrivateClaw.command` or run from `.privateclaw/.scripts`:
 
 ```bash
 cd .privateclaw/.scripts
@@ -117,7 +117,7 @@ uv run privateclaw logs         # View container logs
 
 ```
 privateclaw/                        ← Obsidian vault root
-├── Start PrivateClaw.command       ← Double-click to open menu
+├── PrivateClaw.command       ← Double-click to open menu
 ├── ARCHIVE/                        ← Original files preserved here
 ├── TRANSCRIPTIONS/                 ← Transcribed markdown files
 ├── FLAGGED/                        ← Flagged files with ----PRIVATE---- markers
