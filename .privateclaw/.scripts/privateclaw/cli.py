@@ -94,8 +94,8 @@ def show_menu():
 
         media_exts = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".png", ".jpg", ".jpeg", ".pdf"}
         pending_transcribe = sum(1 for f in root.iterdir() if f.is_file() and f.suffix.lower() in media_exts) if root.exists() else 0
-        flagged = sum(1 for f in flagged_dir.iterdir() if f.is_file()) if flagged_dir.exists() else 0
-        private = sum(1 for f in private_dir.iterdir() if f.is_file()) if private_dir.exists() else 0
+        flagged = sum(1 for f in flagged_dir.iterdir() if f.is_file() and not f.name.startswith(".")) if flagged_dir.exists() else 0
+        private = sum(1 for f in private_dir.iterdir() if f.is_file() and not f.name.startswith(".")) if private_dir.exists() else 0
 
         oc_status = "ON " if oc_on else "OFF"
         t_status = "ON " if t_on else "OFF"
