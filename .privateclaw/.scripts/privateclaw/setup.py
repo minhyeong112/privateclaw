@@ -2,14 +2,14 @@
 
 This script handles:
 1. Installing Homebrew (if needed)
-2. Installing Docker Desktop via Homebrew
+2. Checking Docker Desktop (requires manual GUI setup)
 3. Installing Obsidian via Homebrew
 4. Installing Tesseract for OCR
-5. Installing Ollama for local LLM
-6. Setting up Python environment with uv
+5. Installing ffmpeg for audio processing
+6. Installing Ollama for local LLM (auto-starts service)
 7. Configuring environment variables
-8. Building the OpenClaw container
-9. Creating all required directories
+8. Creating all required directories
+9. Building the OpenClaw container (if Docker is running)
 
 Usage:
     pc-setup              # Run full setup
@@ -63,18 +63,42 @@ def setup_homebrew():
     ])
 
 
-def setup_docker():
-    """Install Docker Desktop via Homebrew."""
-    if check_command("docker"):
-        print("  Docker: already installed")
-        return True
+def check_docker_running() -> bool:
+    """Check if Docker daemon is running."""
+    result = subprocess.run(["docker", "info"], capture_output=True, check=False)
+    return result.returncode == 0
 
-    print("  Installing Docker Desktop...")
-    if not run_cmd(["brew", "install", "--cask", "docker"]):
-        print("  Failed to install Docker Desktop")
+
+def setup_docker():
+    """Check Docker Desktop status and guide user through setup."""
+    if not check_command("docker"):
+        print("  Docker Desktop: NOT INSTALLED")
+        print("")
+        print("  Docker Desktop requires manual installation:")
+        print("    1. Run: brew install --cask docker")
+        print("    2. Open Docker Desktop from Applications")
+        print("    3. Complete the setup wizard (accept terms, etc.)")
+        print("    4. Wait for Docker to show 'running' in menu bar")
+        print("    5. Re-run: uv run privateclaw setup")
+        print("")
+        # Try to install via brew
+        print("  Attempting brew install...")
+        run_cmd(["brew", "install", "--cask", "docker"], check=False)
+        print("")
+        print("  ⚠️  Please open Docker Desktop and complete setup, then re-run setup.")
         return False
 
-    print("  Please start Docker Desktop from Applications and wait for it to initialize.")
+    # Docker installed, check if running
+    if not check_docker_running():
+        print("  Docker Desktop: INSTALLED but NOT RUNNING")
+        print("")
+        print("  Please start Docker Desktop:")
+        print("    1. Open Docker Desktop from Applications (or menu bar)")
+        print("    2. Wait for it to show 'running'")
+        print("    3. Re-run: uv run privateclaw setup")
+        return False
+
+    print("  Docker Desktop: running")
     return True
 
 
@@ -117,17 +141,36 @@ def setup_tesseract():
     return run_cmd(["brew", "install", "tesseract"])
 
 
-def setup_ollama():
-    """Install Ollama."""
-    if check_command("ollama"):
-        print("  Ollama: already installed")
+def setup_ffmpeg():
+    """Install ffmpeg for audio processing."""
+    if check_command("ffmpeg"):
+        print("  ffmpeg: already installed")
         return True
 
-    print("  Installing Ollama...")
-    if not run_cmd(["brew", "install", "ollama"]):
-        return False
+    print("  Installing ffmpeg...")
+    return run_cmd(["brew", "install", "ffmpeg"])
 
+
+def setup_ollama():
+    """Install Ollama and start service."""
+    if check_command("ollama"):
+        print("  Ollama: already installed")
+    else:
+        print("  Installing Ollama...")
+        if not run_cmd(["brew", "install", "ollama"]):
+            return False
+
+    # Start ollama service (needed for ollama to accept commands)
+    print("  Starting Ollama service...")
+    run_cmd(["brew", "services", "start", "ollama"], check=False)
+
+    # Give it a moment to start
+    import time
+    time.sleep(2)
+
+    # Pull the model
     print("  Pulling default model (qwen2.5:14b)...")
+    print("  This may take several minutes (~9GB download)...")
     return run_cmd(["ollama", "pull", "qwen2.5:14b"])
 
 
@@ -245,6 +288,7 @@ def check_status():
         "Homebrew": check_command("brew"),
         "Docker": check_command("docker"),
         "Tesseract": check_command("tesseract"),
+        "ffmpeg": check_command("ffmpeg"),
         "Ollama": check_command("ollama"),
         "uv": check_command("uv"),
     }
@@ -310,6 +354,7 @@ def main():
         ("Docker", setup_docker),
         ("Obsidian", setup_obsidian),
         ("Tesseract", setup_tesseract),
+        ("ffmpeg", setup_ffmpeg),
         ("Ollama", setup_ollama),
         ("Environment", setup_env),
         ("Directories", setup_directories),
